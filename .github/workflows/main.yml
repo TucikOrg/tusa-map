@@ -1,0 +1,22 @@
+name: Update Meta for Docker
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      # Check out the repository code
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          export JAVA_HOME=/root/.sdkman/candidates/java/current
+          chmod +x gradlew
+          ./gradlew assemble
+          mv build/libs/map-0.0.1-SNAPSHOT.jar /root/tucik/map/tucik-map.jar
+      - name: Refresh
+        run: systemctl restart tucik-map
