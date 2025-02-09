@@ -1,1 +1,1 @@
-rootProject.name = "map"
+rootProject.name = "tusa-map"
