@@ -47,15 +47,17 @@ class MapController(
         val landCover               =     layersService.landCover(z, x, y)
         val roads                   =     layersService.road(z, x, y)
         val buildings               =     layersService.buildings(z, x, y)
-        val landuse                 =     layersService.landuse(z, x, y)
         val innerWater              =     layersService.innerWater(z, x, y)
         val rivers                  =     layersService.rivers(z, x, y)
         val placeLabel              =     layersService.placeLabels(z, x, y)
         val admin                   =     layersService.admin(z, x, y)
 
+        val layersSqlData = listOfNotNull(
+            water, landCover, roads, buildings, innerWater, rivers, placeLabel, admin
+        )
+
         // Собираем слои в один ответ
-        val layers = water + landCover + roads + buildings + landuse + innerWater + rivers +
-                placeLabel + admin
+        val layers = layersService.queryTile(layersSqlData, z, x, y)
         cache[key] = layers
 
         val endTime = System.currentTimeMillis()

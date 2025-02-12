@@ -8,10 +8,38 @@ import org.springframework.stereotype.Service
 class LayersService(
     private val jbcTemplate: JdbcTemplate
 ) {
+    fun queryTile(sqlList: List<LayerSqlData>, z: Int, x: Int, y: Int): ByteArray {
+        val layersFromList = mutableListOf<String>()
+        for (layer in sqlList) {
+            layersFromList += """
+            SELECT
+              ST_AsMVT(${layer.layerName}, '${layer.layerName}', 4096, 'geom') AS mvt
+            FROM (
+              SELECT
+                ST_AsMVTGeom(${layer.geom}, bbox, 4096, 256, true) AS geom
+                ${layer.additionalFields}
+              FROM ${layer.table}, tile_bbox
+              WHERE geom && bbox ${layer.additionalFilter}
+            ) AS ${layer.layerName}
+            """.trimIndent()
+        }
+        val layersSql = layersFromList.joinToString(" union all ")
+
+        val query = """
+            WITH tile_bbox AS (
+              SELECT ST_TileEnvelope($z, $x, $y) AS bbox
+            )
+            select STRING_AGG(mvt, '') AS mvt  from (
+                $layersSql
+            );
+        """.trimIndent()
+
+        return jbcTemplate.queryForObject<ByteArray>(query)
+    }
 
     // это слой для всей большой воды (Полигоны)
     // океаны, моря
-    fun oceanPolygons(z: Int, x: Int, y: Int): ByteArray {
+    fun oceanPolygons(z: Int, x: Int, y: Int): LayerSqlData? {
         val waterTables = mapOf(
             0 to "ocean_small_zoom_preset",
             1 to "ocean_small_zoom_preset",
@@ -72,16 +100,23 @@ class LayersService(
             16 to false,
         )
 
-        val geom = geomTables[z]?: return ByteArray(0)
-        val waterTable = waterTables[z]?: return ByteArray(0)
-        val oceanQuery = makeQuery(geom, waterTable, z, x, y, "water", ", ogc_fid as id",
-            simplify = simplifyTable[z]?: true
+        val geom = geomTables[z]?: return null
+        val waterTable = waterTables[z]?: return null
+        val additionalField = ", ogc_fid as id"
+        val layoutName = "water"
+        val simplify = simplifyTable[z]?: true
+
+        return LayerSqlData(
+            geom = geom,
+            table = waterTable,
+            additionalFilter = "",
+            additionalFields = additionalField,
+            layerName = layoutName,
+            simplifyEnabled = simplify
         )
-        val oceanPolygons = jbcTemplate.queryForObject<ByteArray>(oceanQuery)
-        return oceanPolygons
     }
 
-    fun innerWater(z: Int, x: Int, y: Int): ByteArray {
+    fun innerWater(z: Int, x: Int, y: Int): LayerSqlData? {
         val waterTables = mapOf(
             9 to "water",
             10 to "water",
@@ -108,19 +143,24 @@ class LayersService(
             7 to "and ST_Area(geom) > 1000",
         )
 
-        val geom = geomTables[z]?: return ByteArray(0)
-        val waterTable = waterTables[z]?: return ByteArray(0)
+        val geom = geomTables[z]?: return null
+        val waterTable = waterTables[z]?: return null
         val additionalFilter = additionalFilterTable[z]?: ""
-        val waterQuery = makeQuery(geom, waterTable, z, x, y, "water_inner",
-            additionalFilter = additionalFilter
+        val layoutName = "water_inner"
+
+        return LayerSqlData(
+            geom = geom,
+            table = waterTable,
+            additionalFilter = additionalFilter,
+            additionalFields = "",
+            layerName = layoutName,
+            simplifyEnabled = true
         )
-        val water = jbcTemplate.queryForObject<ByteArray>(waterQuery)
-        return water
     }
 
-    fun rivers(z: Int, x: Int, y: Int): ByteArray {
-        return ByteArray(0)
+    fun rivers(z: Int, x: Int, y: Int): LayerSqlData? {
         val waterTables = mapOf(
+            8 to "rivers",
             9 to "rivers",
             10 to "rivers",
             11 to "rivers",
@@ -132,9 +172,8 @@ class LayersService(
         )
 
         val geomTables = mapOf(
-            8 to "ST_Simplify(geom, 10000)",
-            9 to "geom",
-            10 to "geom",
+            8 to "ST_Simplify(geom, 20000)",
+            9 to "ST_Simplify(geom, 10000)",
             11 to "geom",
             12 to "geom",
             13 to "geom",
@@ -143,42 +182,82 @@ class LayersService(
             16 to "geom",
         )
 
-        val geom = geomTables[z]?: return ByteArray(0)
-        val waterTable = waterTables[z]?: return ByteArray(0)
-        val waterQuery = makeQuery(geom, waterTable, z, x, y, "river")
-        val water = jbcTemplate.queryForObject<ByteArray>(waterQuery)
-        return water
+        val geom = geomTables[z]?: return null
+        val waterTable = waterTables[z]?: return null
+        val layoutName = "river"
+
+        return LayerSqlData(
+            geom = geom,
+            table = waterTable,
+            additionalFilter = "",
+            additionalFields = "",
+            layerName = layoutName,
+            simplifyEnabled = true
+        )
     }
 
     // Это покрытие лесное планеты (Полигоны)
-    fun landCover(z: Int, x: Int, y: Int): ByteArray {
-
+    fun landCover(z: Int, x: Int, y: Int): LayerSqlData? {
         val geomTable = mapOf(
             0 to "ST_Simplify(geom, 40000)",
             1 to "ST_Simplify(geom, 17000)",
             2 to "ST_Simplify(geom, 10000)",
             3 to "geom",
+            4 to "ST_Simplify(geom, 300)",
+            5 to "ST_Simplify(geom, 300)",
+            6 to "ST_Simplify(geom, 300)",
+            7 to "ST_Simplify(geom, 300)",
+            8 to "ST_Simplify(geom, 300)",
+            9 to "ST_Simplify(geom, 300)",
+            10 to "ST_Simplify(geom, 100)",
+            11 to "ST_Simplify(geom, 50)",
+            12 to "geom",
+            13 to "geom",
+            14 to "geom",
+            15 to "geom",
+            16 to "geom",
         )
 
         val tables = mapOf(
             0 to "landcover_preset",
             1 to "landcover_preset",
             2 to "landcover_preset",
+            3 to "green_natural_landcover_zoom3",
+            4 to "green_natural_landcover_zoom4",
+
+            8 to "green_natural", // нормальный зум получается и тайлы легкие в целом
+            9 to "green_natural",
+            10 to "green_natural",
+            11 to "green_natural",
+            12 to "green_natural",
+            13 to "green_natural",
+            14 to "green_natural",
+            15 to "green_natural",
+            16 to "green_natural",
+        )
+
+        val additionalFilterTable = mapOf(
+            3 to ""
         )
 
         val additionalFields = ""
-        val geom = geomTable[z]?: return ByteArray(0)
-        val table = tables[z]?: return ByteArray(0)
+        val geom = geomTable[z]?: return null
+        val table = tables[z]?: return null
+        val filter = additionalFilterTable[z]?: ""
+        val layoutName = "landcover"
 
-        val landCoverQuery = makeQuery(geom, table, z, x, y, "landcover",
-            additionalFields = additionalFields
+        return LayerSqlData(
+            geom = geom,
+            table = table,
+            additionalFilter = filter,
+            additionalFields = additionalFields,
+            layerName = layoutName,
+            simplifyEnabled = true
         )
-        val landCover = jbcTemplate.queryForObject<ByteArray>(landCoverQuery)
-        return landCover
     }
 
     // Это дороги (Линии)
-    fun road(z: Int, x: Int, y: Int): ByteArray {
+    fun road(z: Int, x: Int, y: Int): LayerSqlData? {
         val additionalFieldsTables = mapOf(
             3 to ", type as class",
             4 to ", type as class",
@@ -190,10 +269,10 @@ class LayersService(
             10 to ", type as class",
             11 to ", type as class",
             12 to ", type as class",
-            13 to ", type as class, name",
-            14 to ", type as class, name",
-            15 to ", type as class, name",
-            16 to ", type as class, name",
+            13 to ", type as class, name, id",
+            14 to ", type as class, name, id",
+            15 to ", type as class, name, id",
+            16 to ", type as class, name, id",
         )
 
         val zoomTables = mapOf(
@@ -201,9 +280,9 @@ class LayersService(
             4 to "roads_small_zoom_3",
             5 to "roads_small_zoom",
             6 to "roads_small_zoom",
-            7 to "roads_small_zoom",
-            8 to "roads_small_zoom",
-            9 to "roads_small_zoom",
+            7 to "roads_simplify",
+            8 to "roads_simplify",
+            9 to "roads_simplify",
             10 to "roads_simplify",
             11 to "roads_simplify",
             12 to "roads_simplify",
@@ -217,14 +296,14 @@ class LayersService(
             3 to "ST_Simplify(geom, 50000)",
             4 to "geom",
             5 to "ST_Simplify(geom, 40000)",
-            6 to "ST_Simplify(geom, 30000)",
-            7 to "ST_Simplify(geom, 13000)",
-            8 to "ST_Simplify(geom, 3000)",
-            9 to "geom",
-            10 to "ST_Simplify(geom, 20000)",
-            11 to "ST_Simplify(geom, 10000)",
+            6 to "ST_Simplify(geom, 20000)",
+            7 to "ST_Simplify(geom, 20000)",
+            8 to "ST_Simplify(geom, 10000)",
+            9 to "ST_Simplify(geom, 5000)",
+            10 to "ST_Simplify(geom, 3000)",
+            11 to "ST_Simplify(geom, 1000)",
             12 to "geom",
-            13 to "ST_Simplify(geom, 5000)",
+            13 to "geom",
             14 to "geom",
             15 to "geom",
             16 to "geom",
@@ -233,22 +312,29 @@ class LayersService(
         val additionalFilterTable = mapOf(
             5 to "and type in ('motorway', 'trunk', 'primary')",
             6 to "and type in ('motorway', 'trunk', 'primary')",
+            13 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link')",
+            14 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian')",
+            15 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian')",
+            16 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian')"
         )
 
-        val geom = geomTables[z]?: return ByteArray(0)
-        val table = zoomTables[z]?: return ByteArray(0)
+        val geom = geomTables[z]?: return null
+        val table = zoomTables[z]?: return null
         val additionalFields = additionalFieldsTables[z]?: ""
         val additionalFilter = additionalFilterTable[z]?: ""
+        val layoutName = "road"
 
-        val roadsQuery = makeQuery(geom, table, z, x, y, "road",
+        return LayerSqlData(
+            geom = geom,
+            table = table,
+            additionalFilter = additionalFilter,
             additionalFields = additionalFields,
-            additionalFilter = additionalFilter
+            layerName = layoutName,
+            simplifyEnabled = true
         )
-        val roads = jbcTemplate.queryForObject<ByteArray>(roadsQuery)
-        return roads
     }
 
-    fun buildings(z: Int, x: Int, y: Int): ByteArray {
+    fun buildings(z: Int, x: Int, y: Int): LayerSqlData? {
         val geomTable = mapOf(
             13 to "geom",
             14 to "geom",
@@ -258,19 +344,25 @@ class LayersService(
 
         val tables = mapOf(
             13 to "buildings_simplify25x25",
-            14 to "buildings_simplify25x25",
+            14 to "buildings",
             15 to "buildings",
             16 to "buildings",
         )
-        val table = tables[z]?: return ByteArray(0)
+        val table = tables[z]?: return null
+        val geom = geomTable[z]?: return null
+        val layoutName = "buildings"
 
-        val geom = geomTable[z]?: return ByteArray(0)
-        val buildingsQuery = makeQuery(geom, table, z, x, y, "buildings")
-        val buildings = jbcTemplate.queryForObject<ByteArray>(buildingsQuery)
-        return buildings
+        return LayerSqlData(
+            geom = geom,
+            table = table,
+            additionalFilter = "",
+            additionalFields = "",
+            layerName = layoutName,
+            simplifyEnabled = true
+        )
     }
 
-    fun placeLabels(z: Int, x: Int, y: Int): ByteArray {
+    fun placeLabels(z: Int, x: Int, y: Int): LayerSqlData? {
         val geomTable = mapOf(
             0 to "geom",
             1 to "geom",
@@ -321,17 +413,22 @@ class LayersService(
             13  to "and name is not null and population >= 0 and population < 300000",
         )
 
-        val table = tables[z]?: return ByteArray(0)
-        val geom = geomTable[z]?: return ByteArray(0)
-        val additionalFilter = filterTable[z]?: return ByteArray(0)
-        val placeLabelsQuery = makeQuery(geom, table, z, x, y, "place_label",
-            additionalFields = ", name, type, name_en, name_ru, population",
-            additionalFilter = additionalFilter)
-        val placeLabels = jbcTemplate.queryForObject<ByteArray>(placeLabelsQuery)
-        return placeLabels
+        val table = tables[z]?: return null
+        val geom = geomTable[z]?: return null
+        val additionalFilter = filterTable[z]?: return null
+        val layoutName = "place_label"
+
+        return LayerSqlData(
+            geom = geom,
+            table = table,
+            additionalFilter = additionalFilter,
+            additionalFields = ", name, type, name_en, name_ru, population, id",
+            layerName = layoutName,
+            simplifyEnabled = true
+        )
     }
 
-    fun admin(z: Int, x: Int, y: Int): ByteArray {
+    fun admin(z: Int, x: Int, y: Int): LayerSqlData? {
         val geomTable = mapOf(
             1 to "ST_Simplify(geom, 10000)",
             2 to "ST_Simplify(geom, 10000)",
@@ -377,66 +474,42 @@ class LayersService(
             12 to "and admin_level in ('0', '1', '2', '3', '4')",
         )
 
-        val table = tables[z]?: return ByteArray(0)
-        val geom = geomTable[z]?: return ByteArray(0)
-        val additionalFilter = additionalFilterTable[z]?: return ByteArray(0)
+        val table = tables[z]?: return null
+        val geom = geomTable[z]?: return null
+        val additionalFilter = additionalFilterTable[z]?: return null
+        val layoutName = "admin"
 
-        val adminQuery = makeQuery(geom, table, z, x, y, "admin",
+        return LayerSqlData(
+            geom = geom,
+            table = table,
+            additionalFilter = additionalFilter,
             additionalFields = ", type as class, admin_level, name",
-            additionalFilter = additionalFilter
+            layerName = layoutName,
+            simplifyEnabled = true
         )
-        return jbcTemplate.queryForObject<ByteArray>(adminQuery)
     }
 
     fun landuse(z: Int, x: Int, y: Int): ByteArray {
-        val geomTable = mapOf(
-            13 to "geom",
-            14 to "geom",
-            15 to "geom",
-            16 to "geom",
-        )
-
-        val tables = mapOf(
-            13 to "landuse",
-            14 to "landuse",
-            15 to "landuse",
-            16 to "landuse",
-        )
-        val table = tables[z]?: return ByteArray(0)
-
-        val geom = geomTable[z]?: return ByteArray(0)
-        val landuseQuery = makeQuery(geom, table, z, x, y, "landuse",
-            additionalFields = ", type as class",
-        )
-        return jbcTemplate.queryForObject<ByteArray>(landuseQuery)
-    }
-
-    private fun makeQuery(
-        geomStr: String,
-        table: String,
-        z: Int, x: Int, y: Int,
-        layoutName: String,
-        additionalFields: String = "",
-        additionalFilter: String = "",
-        simplify: Boolean = true
-    ): String {
-        val query: String = """
-            WITH tile_bbox AS (
-              SELECT ST_TileEnvelope($z, $x, $y) AS bbox
-            )
-            SELECT
-              ST_AsMVT(q, '$layoutName', 4096, 'geom')
-            FROM (
-              SELECT
-                ST_AsMVTGeom($geomStr, bbox, 4096, 256, $simplify) AS geom
-                $additionalFields
-              FROM $table, tile_bbox
-              WHERE geom && bbox and ST_Intersects(
-                geom,
-                bbox
-              ) $additionalFilter
-            ) AS q;
-        """.trimIndent()
-        return query
+        return ByteArray(0)
+//        val geomTable = mapOf(
+//            13 to "geom",
+//            14 to "geom",
+//            15 to "geom",
+//            16 to "geom",
+//        )
+//
+//        val tables = mapOf(
+//            13 to "landuse",
+//            14 to "landuse",
+//            15 to "landuse",
+//            16 to "landuse",
+//        )
+//        val table = tables[z]?: return ByteArray(0)
+//
+//        val geom = geomTable[z]?: return ByteArray(0)
+//        val landuseQuery = makeQuery(geom, table, z, x, y, "landuse",
+//            additionalFields = ", type as class",
+//        )
+//        return jbcTemplate.queryForObject<ByteArray>(landuseQuery)
     }
 }
