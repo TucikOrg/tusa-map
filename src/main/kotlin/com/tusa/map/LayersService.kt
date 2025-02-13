@@ -202,9 +202,10 @@ class LayersService(
             0 to "ST_Simplify(geom, 40000)",
             1 to "ST_Simplify(geom, 17000)",
             2 to "ST_Simplify(geom, 10000)",
-            3 to "geom",
+            3 to "ST_Simplify(geom, 300)",
             4 to "ST_Simplify(geom, 300)",
             5 to "ST_Simplify(geom, 300)",
+
             6 to "ST_Simplify(geom, 300)",
             7 to "ST_Simplify(geom, 300)",
             8 to "ST_Simplify(geom, 300)",
@@ -224,6 +225,7 @@ class LayersService(
             2 to "landcover_preset",
             3 to "green_natural_landcover_zoom3",
             4 to "green_natural_landcover_zoom4",
+            5 to "green_natural_landcover_zoom5",
 
             8 to "green_natural", // нормальный зум получается и тайлы легкие в целом
             9 to "green_natural",
@@ -343,7 +345,7 @@ class LayersService(
         )
 
         val tables = mapOf(
-            13 to "buildings_simplify25x25",
+            13 to "buildings",
             14 to "buildings",
             15 to "buildings",
             16 to "buildings",
@@ -422,7 +424,7 @@ class LayersService(
             geom = geom,
             table = table,
             additionalFilter = additionalFilter,
-            additionalFields = ", name, type, name_en, name_ru, population, id",
+            additionalFields = ", name, type, name_en, name_ru, id",
             layerName = layoutName,
             simplifyEnabled = true
         )
