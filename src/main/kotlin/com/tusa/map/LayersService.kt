@@ -315,9 +315,9 @@ class LayersService(
             5 to "and type in ('motorway', 'trunk', 'primary')",
             6 to "and type in ('motorway', 'trunk', 'primary')",
             13 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link')",
-            14 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian')",
-            15 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian')",
-            16 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian')"
+            14 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian', 'track', 'road', 'unclassified')",
+            15 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian', 'unclassified', 'living_street', 'track', 'road')",
+            16 to "and type in ('motorway', 'trunk', 'primary', 'trunk_link', 'secondary', 'tertiary', 'secondary_link', 'tertiary_link', 'tertiary', 'primary_link', 'service', 'footway', 'residential', 'pedestrian', 'unclassified', 'living_street', 'track', 'road')"
         )
 
         val geom = geomTables[z]?: return null
@@ -491,27 +491,30 @@ class LayersService(
         )
     }
 
-    fun landuse(z: Int, x: Int, y: Int): ByteArray {
-        return ByteArray(0)
-//        val geomTable = mapOf(
-//            13 to "geom",
-//            14 to "geom",
-//            15 to "geom",
-//            16 to "geom",
-//        )
-//
-//        val tables = mapOf(
-//            13 to "landuse",
-//            14 to "landuse",
-//            15 to "landuse",
-//            16 to "landuse",
-//        )
-//        val table = tables[z]?: return ByteArray(0)
-//
-//        val geom = geomTable[z]?: return ByteArray(0)
-//        val landuseQuery = makeQuery(geom, table, z, x, y, "landuse",
-//            additionalFields = ", type as class",
-//        )
-//        return jbcTemplate.queryForObject<ByteArray>(landuseQuery)
+    fun landuse(z: Int, x: Int, y: Int): LayerSqlData? {
+        val geomTable = mapOf(
+            13 to "geom",
+            14 to "geom",
+            15 to "geom",
+            16 to "geom",
+        )
+
+        val tables = mapOf(
+            13 to "landuse",
+            14 to "landuse",
+            15 to "landuse",
+            16 to "landuse",
+        )
+        val table = tables[z]?: return null
+        val geom = geomTable[z]?: return null
+
+        return LayerSqlData(
+            geom = geom,
+            table = table,
+            additionalFilter = "",
+            additionalFields = ", type as class",
+            layerName = "landuse",
+            simplifyEnabled = true
+        )
     }
 }

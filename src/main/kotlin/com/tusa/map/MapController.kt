@@ -51,9 +51,11 @@ class MapController(
         val rivers                  =     layersService.rivers(z, x, y)
         val placeLabel              =     layersService.placeLabels(z, x, y)
         val admin                   =     layersService.admin(z, x, y)
+        val landUse                 =     layersService.landuse(z, x, y)
 
         val layersSqlData = listOfNotNull(
-            water, landCover, roads, buildings, innerWater, rivers, placeLabel, admin
+            water, landCover, roads, buildings, innerWater, rivers, placeLabel, admin,
+            landUse
         )
 
         // Собираем слои в один ответ
