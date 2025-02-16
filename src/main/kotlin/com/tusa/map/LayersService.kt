@@ -1,13 +1,61 @@
 package com.tusa.map
 
+import com.tusa.map.point.PolygonName
+import com.tusa.map.point.StreetName
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Service
 
 @Service
 class LayersService(
-    private val jbcTemplate: JdbcTemplate
+    private val jbcTemplate: JdbcTemplate,
+    private val namedJdbcTemplate: NamedParameterJdbcTemplate
 ) {
+    fun queryPolygonName(lat: Float, lon: Float): PolygonName? {
+        val polygonsQuery = """
+            SELECT tags->>'name' as name, tags->>'place' as place, tags->>'admin_level' as admin_level
+            FROM polygons
+            WHERE ST_Contains(geom, ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 3857)) limit 1;
+        """.trimIndent()
+
+        val params = MapSqlParameterSource()
+            .addValue("lat", lat)
+            .addValue("lon", lon)
+
+        val result = namedJdbcTemplate.query(polygonsQuery, params) { rs, _ ->
+            PolygonName(
+                name = rs.getString("name"),
+                place = rs.getString("place"),
+                adminLevel = rs.getString("admin_level")
+            )
+        }
+        return result.firstOrNull()
+    }
+
+    fun queryStreetName(lat: Float, lon: Float): StreetName? {
+        val streetQuery = """
+            SELECT name, type
+            FROM roads
+            WHERE name IS NOT NULL
+            ORDER BY geom <-> ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 3857)
+            LIMIT 1;
+        """.trimIndent()
+
+        val params = MapSqlParameterSource()
+            .addValue("lat", lat)
+            .addValue("lon", lon)
+
+        val result = namedJdbcTemplate.query(streetQuery, params) { rs, _ ->
+            StreetName(
+                name = rs.getString("name"),
+                type = rs.getString("type"),
+            )
+        }
+        return result.firstOrNull()
+    }
+
     fun queryTile(sqlList: List<LayerSqlData>, z: Int, x: Int, y: Int): ByteArray {
         val layersFromList = mutableListOf<String>()
         for (layer in sqlList) {

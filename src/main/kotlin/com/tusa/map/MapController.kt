@@ -10,11 +10,26 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class MapController(
-    private val layersService: LayersService
+    private val layersService: LayersService,
 ) {
     private val logger = org.slf4j.LoggerFactory.getLogger(javaClass)
     private val cache: MutableMap<String, ByteArray> = mutableMapOf()
     private var atomicInteger: AtomicInteger = AtomicInteger(0)
+
+    @GetMapping("api/v1/tile/map-title/{lat}/{lon}/{zoom}")
+    fun mapTitle(
+        @PathVariable lat: Float,
+        @PathVariable lon: Float,
+        @PathVariable zoom: Int
+    ): String {
+        if (zoom <= 10) {
+            val pointName = layersService.queryPolygonName(lat, lon)
+            return pointName?.name ?: ""
+        }
+
+        val streetName = layersService.queryStreetName(lat, lon)
+        return streetName?.name ?: ""
+    }
 
     @GetMapping("api/v1/tile/{z}/{x}/{y}.mvt", produces = ["application/vnd.mapbox-vector-tile"])
     fun getTile(
